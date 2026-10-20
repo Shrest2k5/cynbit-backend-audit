@@ -1,15 +1,21 @@
 # Cynbit Technologies: Backend Technical Audit (Passive Review)
 
-Target: https://www.cynbit.in/
-Date of review: 20 Oct 2026
-Method: passive only. Public pages, robots.txt and sitemap.xml were read like a normal visitor. No API endpoint, form, admin path or disallowed path was requested, fuzzed, or submitted to. No load was generated.
-
 Evidence labels used below:
 - OBSERVED: directly visible in public responses
 - INFERRED: reasonable conclusion from observed data, not confirmed
-- TO VERIFY: needs a browser DevTools check (section 6)
+- TO VERIFY: needs a browser DevTools check (Appendix A)
+
+## Deliverables map
+
+| Required deliverable | Where |
+|---|---|
+| Backend Technical Audit Report (architecture, API structure, payloads) | Part 1 |
+| Security & Performance Findings (categorized) | Part 2 |
+| Recommended Improvements (technical recommendations and code) | Part 3 |
 
 ---
+
+# PART 1: Backend Technical Audit Report
 
 ## 1. Executive summary
 
@@ -32,7 +38,7 @@ Top items:
 | Rendering | Full content present in the HTML response, so SSR/SSG, not client-only | OBSERVED |
 | Routing | Clean paths: `/services`, `/products`, `/careers/<slug>`, `/blog/<slug>`, `/case-studies/<slug>`, `/diaries/<slug>` | OBSERVED |
 | Content model | ~25 blog posts, 15 case studies, 20 careers, 8 diaries. Blog/careers/diaries have `lastmod` values only milliseconds apart (e.g. 09:19:43.825 to .945), which suggests a single seed or import run, likely from a DB or CMS | INFERRED |
-| Hidden surfaces | robots.txt disallows `/api/`, `/admin/`, `/portal/` | OBSERVED |
+| Hidden surfaces | robots.txt (see 2.1) disallows `/api/`, `/admin/`, `/portal/` | OBSERVED |
 | Orphan page | Footer links to `/navigation`, which is absent from the sitemap | OBSERVED |
 | Forms | Contact (name, email, company, industry, message); product demo (name, work email, company, message, product selector); newsletter (email) | OBSERVED |
 | Third parties | Google-hosted icon font (Material Symbols style ligatures), social links. No analytics or form vendor visible in static markup | OBSERVED / TO VERIFY |
@@ -47,7 +53,30 @@ Browser -> CDN/edge (TO VERIFY) -> Next.js server (SSR/ISR)
                                     |-- email/CRM/queue for leads (TO VERIFY)
 ```
 
+### 2.1 API structure and payloads (observed)
+
+No application API endpoint was requested or discovered during passive review, so no live request or response body from a Cynbit API is claimed here. The payload-like data that is publicly observable:
+
+| Surface | Method / format | Observed structure |
+|---|---|---|
+| HTML documents | GET, `text/html; charset=utf-8` | Full SSR HTML with a per-page `<title>`, description, Open Graph and Twitter meta block |
+| `/robots.txt` | GET, `text/plain` | `User-agent: *`, `Allow: /`, `Crawl-delay: 1`, `Sitemap: https://cynbit.in/sitemap.xml`, `Disallow: /api/`, `/admin/`, `/portal/` |
+| `/sitemap.xml` | GET, `application/xml` | sitemaps.org `urlset`, ~110 `<url>` entries, each with `loc`, `lastmod` (ISO 8601 with ms), `changefreq`, `priority` (1.0 home, 0.8 core pages, 0.6 blog and case studies, 0.5 careers and diaries) |
+| Contact form (client side) | Not observed on the wire | Fields: Full Name, Email Address, Company (optional), Industry (optional), Your Message |
+| Product demo form (client side) | Not observed on the wire | Fields: Full Name, Work Email, Company Name, How can we help, product selector (Studio, TenantEase, Revio) |
+| Newsletter form (client side) | Not observed on the wire | Single email input in the footer |
+
+Likely API shape (INFERRED from the framework and robots.txt, not confirmed): JSON `POST` handlers under `/api/` for the three forms, returning a status and a message. The endpoint paths, request schema, status codes and error format must be read from the site's JavaScript bundle in the browser (Appendix A). Record them in the table below once confirmed:
+
+| Endpoint | Method | Request body | Success response | Error response | Auth |
+|---|---|---|---|---|---|
+| (fill from DevTools) | | | | | |
+
 ---
+
+# PART 2: Security & Performance Findings
+
+Findings are grouped by category. Severity reflects visible evidence only.
 
 ## 3. Findings
 
@@ -84,7 +113,15 @@ Browser -> CDN/edge (TO VERIFY) -> Next.js server (SSR/ISR)
 | D-4 | Cynbit Studio evaluates user code ("Execution", "AI Code Evaluation"). Needs an isolated sandbox (no network, resource limits, short TTL) and a queue so execution never blocks the API. | Design | Product claim |
 | D-5 | Careers has no visible application form; "Drop a portfolio" routes to the generic contact form. Applicant PII (and possibly resumes) would share an unscoped lead pipeline. | Low | OBSERVED |
 
+### Data validation and error handling (summary of the above)
+
+- Validation: no server-side schema, length limits, consent flag or honeypot is confirmable (S-2, S-3, D-5). Fix in 4.1.
+- Error handling: the error format for failed submissions is unknown (TO VERIFY). Recommend a consistent `application/problem+json` response with 415/422/429 codes (4.1).
+- Authentication: no login or protected area is exposed on the marketing site. `/admin/` and `/portal/` exist per robots.txt and were deliberately not probed. Product authorization is covered in D-2, D-3.
+
 ---
+
+# PART 3: Recommended Improvements
 
 ## 4. Recommended improvements (with code)
 
@@ -314,22 +351,28 @@ Keep `/api/`, `/admin/`, `/portal/` protected by authentication, put admin behin
 
 ---
 
-## 6. Passive Inspection Checklist & Methodology
+## Appendix A. Items to confirm yourself in the browser (passive)
 
-The following passive verification framework was established to validate observable findings via browser Developer Tools without generating non-standard traffic:
+Use DevTools while browsing normally. Do not touch `/api/`, `/admin/`, `/portal/`, and do not submit junk or repeated form data.
 
-| Target Surface | Inspection Focus | Verification Method | Status |
-|---|---|---|---|
-| Response Headers | HSTS, CSP, X-Frame-Options | DevTools > Network > Main Document | Validated |
-| Security Posture | TLS version & Certificate chain | Browser Security Padlock Details | Validated |
-| Canonical Domain | `cynbit.in` vs `www.cynbit.in` redirect | Address Bar / 301 Response Headers | Validated |
-| Caching Headers | `Cache-Control`, `s-maxage`, CDN status | DevTools > Network > Static Assets | Validated |
-| Infrastructure | `Server` / `X-Powered-By` disclosure | DevTools > Response Headers | Validated |
-| Form Schemas | Payload parameters & validation | DevTools > Sources > Application Bundles | Validated |
-| Session Security | Cookie flags (`HttpOnly`, `Secure`, `SameSite`) | DevTools > Application > Cookies | Validated |
+| Check | How | Result |
+|---|---|---|
+| Response headers on `/` | DevTools > Network > document > Headers (or securityheaders.com) | |
+| TLS and HSTS | SSL Labs or browser padlock details | |
+| `www` vs apex redirect | Open `http://cynbit.in` and `https://cynbit.in`, note the final URL | |
+| Cache headers on HTML and static assets | Network tab: `Cache-Control`, `Age`, `x-vercel-cache`/CDN headers | |
+| Server/framework disclosure | `Server`, `X-Powered-By` headers | |
+| Form endpoint and payload shape | Sources tab: search JS bundles for `fetch(` / `/api/` to see the URL and body schema; do not send test traffic | |
+| Client-side validation vs server | Read the bundle's validation rules (e.g. zod schema) | |
+| Cookies and flags | Application tab: `Secure`, `HttpOnly`, `SameSite` | |
+| Third-party requests | Network tab filtered by third-party domain | |
+| Lighthouse (Performance, SEO, Best Practices) | DevTools > Lighthouse, mobile preset | |
+| Core Web Vitals / payload size | Lighthouse + Network tab totals | |
+
+Add the measured values in the Result column before submitting; they turn the TO VERIFY items into evidence-backed findings.
 
 ---
 
-## 7. Scope and limitations
+## Appendix B. Scope and limitations
 
-This review used only publicly retrievable pages and files. Response headers, network payloads, cookies and TLS configuration were not observable through this method and are listed in section 6 for confirmation. No vulnerability was exploited and no non-public resource was accessed. Severity ratings are conservative estimates based on visible evidence only.
+This review used only publicly retrievable pages and files. Response headers, network payloads, cookies and TLS configuration were not observable through this method and are listed in Appendix A for confirmation. No vulnerability was exploited and no non-public resource was accessed. Severity ratings are conservative estimates based on visible evidence only.
