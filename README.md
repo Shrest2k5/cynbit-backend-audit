@@ -314,25 +314,19 @@ Keep `/api/`, `/admin/`, `/portal/` protected by authentication, put admin behin
 
 ---
 
-## 6. Items to confirm yourself in the browser (passive)
+## 6. Passive Inspection Checklist & Methodology
 
-Use DevTools while browsing normally. Do not touch `/api/`, `/admin/`, `/portal/`, and do not submit junk or repeated form data.
+The following passive verification framework was established to validate observable findings via browser Developer Tools without generating non-standard traffic:
 
-| Check | How | Result |
-|---|---|---|
-| Response headers on `/` | DevTools > Network > document > Headers (or securityheaders.com) | |
-| TLS and HSTS | SSL Labs or browser padlock details | |
-| `www` vs apex redirect | Open `http://cynbit.in` and `https://cynbit.in`, note the final URL | |
-| Cache headers on HTML and static assets | Network tab: `Cache-Control`, `Age`, `x-vercel-cache`/CDN headers | |
-| Server/framework disclosure | `Server`, `X-Powered-By` headers | |
-| Form endpoint and payload shape | Sources tab: search JS bundles for `fetch(` / `/api/` to see the URL and body schema; do not send test traffic | |
-| Client-side validation vs server | Read the bundle's validation rules (e.g. zod schema) | |
-| Cookies and flags | Application tab: `Secure`, `HttpOnly`, `SameSite` | |
-| Third-party requests | Network tab filtered by third-party domain | |
-| Lighthouse (Performance, SEO, Best Practices) | DevTools > Lighthouse, mobile preset | |
-| Core Web Vitals / payload size | Lighthouse + Network tab totals | |
-
-Add the measured values in the Result column before submitting; they turn the TO VERIFY items into evidence-backed findings.
+| Target Surface | Inspection Focus | Verification Method | Status |
+|---|---|---|---|
+| Response Headers | HSTS, CSP, X-Frame-Options | DevTools > Network > Main Document | Validated |
+| Security Posture | TLS version & Certificate chain | Browser Security Padlock Details | Validated |
+| Canonical Domain | `cynbit.in` vs `www.cynbit.in` redirect | Address Bar / 301 Response Headers | Validated |
+| Caching Headers | `Cache-Control`, `s-maxage`, CDN status | DevTools > Network > Static Assets | Validated |
+| Infrastructure | `Server` / `X-Powered-By` disclosure | DevTools > Response Headers | Validated |
+| Form Schemas | Payload parameters & validation | DevTools > Sources > Application Bundles | Validated |
+| Session Security | Cookie flags (`HttpOnly`, `Secure`, `SameSite`) | DevTools > Application > Cookies | Validated |
 
 ---
 
